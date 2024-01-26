@@ -375,24 +375,19 @@ impl Daemon {
 
     fn handle_request_batch(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
         let id = self.message_id.next();
-        let chunks = params_list
+        let reqs = params_list
             .iter()
             .map(|params| json!({"method": method, "params": params, "id": id}))
-            .chunks(50_000); // Max Amount of batched requests
+            .collect();
         let mut results = vec![];
-        for chunk in &chunks {
-            let reqs = chunk.collect();
-            let mut replies = self.call_jsonrpc(method, &reqs)?;
-            if let Some(replies_vec) = replies.as_array_mut() {
-                for reply in replies_vec {
-                    results.push(parse_jsonrpc_reply(reply.take(), method, id)?)
-                }
-            } else {
-                bail!("non-array replies: {:?}", replies);
+        let mut replies = self.call_jsonrpc(method, &reqs)?;
+        if let Some(replies_vec) = replies.as_array_mut() {
+            for reply in replies_vec {
+                results.push(parse_jsonrpc_reply(reply.take(), method, id)?)
             }
+            return Ok(results);
         }
-
-        Ok(results)
+        bail!("non-array replies: {:?}", replies);
     }
 
     fn retry_request_batch(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
